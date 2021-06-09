@@ -1,0 +1,307 @@
+#include <iostream>//iostream的意思是输入输出流,标准库定义了 4 个 IO 对象。处理输入时使用命名为 cin(读作 see-in)的 istream 类型对象。这个对象也称为标准输入。处理输出时使用命名为 cout(读作 see-out)的 ostream 类型对象,这个对象也称为标准输出。标准库还定义了另外两个 ostream 对象,分别命名为 cerr 和 clog(分别读作“see-err”和“see-log”)。cerr 对象又叫作标准错误,通常用来输出警告和错误信息给程序的使用者。而 clog 对象用于产生程序执行的一般信息iostream（.h）库的基础是类模板的层级结构。类模板以一种与类型无关的方式，提供了这个库的大部分功能。
+#include <stdio.h>//包含“标准输入输出 头文件”
+#include <conio.h>//conio.h不是C标准库中的头文件，conio是Console Input/Output（控制台输入输出）的简写，其中定义了通过控制台进行数据输入和数据输出的函数，主要是一些用户通过按键盘产生的对应操作，比如getch()函数等等。
+#include <windows.h>//Windows.h是一个最重要的头文件，它包含了其他Windows头文件，这些头文件的某些也包含了其他头文件。
+#include <time.h> //time.h是C/C++中的日期和时间头文件。用于需要时间方面的函数
+
+#define Height 25 //设置迷宫的高度25
+#define Width 25 //设置迷宫的宽度25
+#define Wall 1//设置墙的厚度为1
+#define Road 0//0表示通路
+#define Start 2//开始
+#define End 3//结束
+#define Esc 5//退出
+#define Up 1//向前
+#define Down 2//退回
+#define Left 3//向左
+#define Right 4//向右
+#define Auto  6//自动
+
+int map[Height + 2][Width + 2];//用一个二维数组定义高为27宽为27的地图
+int mask[Height + 2][Width + 2];
+int RecordX[(Height + 2) * (Width + 2) + 10];
+int RecordY[(Height + 2) * (Width + 2) + 10];
+int RecordFX[(Height + 2) * (Width + 2) + 10];//坐标记录
+
+int StepX[4];//定义一个长度为4的StepX数组
+int StepY[4];//定义一个长度为4的StepY数组
+
+void gotoxy(int x, int y) //移动坐标
+{
+	COORD coord;/*COORD是Windows API中定义的一种结构，表示一个字符在控制台屏幕上的坐标。其定义为：
+                                                                               typedef struct _COORD {
+                                                                               SHORT X; // horizontal coordinate
+                                                                               SHORT Y; // vertical coordinate
+                                                                               } COORD;*/
+	coord.X = x;
+	coord.Y = y;
+	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);//SetConsoleCursorPosition是一个window api;SetConsoleCursorPosition是API中定位光标位置的函数。
+}//GetStdHandle是一个Windows API函数。它用于从一个特定的标准设备（标准输入、标准输出或标准错误）中取得一个句柄（用来标识不同设备的数值）。可以嵌套使用。
+void hidden()//隐藏光标
+{
+	HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);//HANDLE：句柄，是Windows用来表示对象的（不是C++的对象），HWND是其中一种，HWND是HANDLE，但HANDLE不只是HWND，HANDLE是一个通用句柄表示，HWND是一个专用表示窗口的句柄。更具体的可查找MSDN。包含在winnt.h头文件中。
+	CONSOLE_CURSOR_INFO cci; 
+	GetConsoleCursorInfo(hOut, &cci);//GetConsoleCursorInfo 函数是指检索有关指定的控制台屏幕缓冲区的光标的可见性和大小信息。
+	cci.bVisible = 0;//赋1为显示，赋0为隐藏
+	SetConsoleCursorInfo(hOut, &cci);//SetConsoleCursorInfo 函数设置指定控制台屏幕缓冲区的光标的大小和可见性。
+ 
+}
+
+
+void create(int x, int y) //随机生成迷宫
+{
+	int c[4][2] = { 0,1,1,0,0,-1,-1,0 }; //四个方向
+	int i, j, t;//定义三个整形变量
+	for (i = 0; i < 4; i++)
+	{
+		j = rand() % 4;//rand()函数是产生随机数的一个随机函数。返回的随机数是大于等于 0 及小于 1 的均匀分布随机实数，rand()函数每次计算工作表时都将返回一个新的随机实数。
+		t = c[i][0]; c[i][0] = c[j][0]; c[j][0] = t;
+		t = c[i][1]; c[i][1] = c[j][1]; c[j][1] = t;
+	}   //将迷宫的方向打乱
+	map[x][y] = Road;
+	for (i = 0; i < 4; i++)
+		if (map[x + 2 * c[i][0]][y + 2 * c[i][1]] == Wall)
+		{
+			map[x + c[i][0]][y + c[i][1]] = Road;
+			create(x + 2 * c[i][0], y + 2 * c[i][1]);
+		}//区分好墙和通路以画出迷宫地图
+
+}
+int get_key() //接收按键
+{
+	char c;
+	while (c = _getch())
+	{
+		if (c == ' ') return Auto;//空格
+		if (c == 27) return Esc; //Esc
+		if (c != -32)continue;
+		c = _getch();
+		if (c == 72) return Up; //上
+		if (c == 80) return Down; //下
+		if (c == 75) return Left; //左
+		if (c == 77) return Right; //右
+	}
+	return 0;
+}
+void paint(int x, int y) //画迷宫
+{
+	gotoxy(2 * y - 2, x - 1);//gotoxy(int x, int y)是 Borland C 扩充函数库 conio.h 中声明的一个函数，功能是将光标移动到指定位置。原型： void gotoxy(int x, int y)
+	switch (map[x][y])
+	{
+	case Start:
+		printf("入"); break; //画入口
+	case End:
+		printf("出"); break; //画出口
+	case Wall:
+		printf("▇"); break; //画墙
+	case Road:
+		printf("  "); break; //画路
+	}
+}
+void game()//定义游戏操作过程的函数
+{
+	int x = 2, y = 1; //玩家当前位置，刚开始在入口处
+	int c; //用来接收按键
+	int  curr_step = 0;
+	int failflag = 0;
+	//右方向
+	StepX[0] = 0;
+	StepY[0] = 1;
+
+	//左方向
+	StepX[2] = 0;
+	StepY[2] = -1;
+
+	//下方向
+	StepX[1] = -1;
+	StepY[1] = 0;
+
+	//上方向
+	StepX[3] = 1;
+	StepY[3] = 0;
+	for (int i = 0; i < Height + 2; i++)
+		for (int j = 0; j < Width + 2; j++)
+			mask[i][j] = 0;
+
+	for (int i = 0; i < (Height + 2) * (Width + 2) + 10; i++)
+	{
+		RecordX[i] = 0;
+		RecordY[i] = 0;
+		RecordFX[i] = 0;
+	}
+
+	RecordX[0] = x;
+	RecordY[0] = y;
+	RecordFX[0] = 0;
+	mask[x][y] = 1;
+	c = 0;
+	while (failflag == 0)
+	{
+		gotoxy(2 * y - 2, x - 1);
+		printf("●"); //画出玩家当前位置
+		if (map[x][y] == End) //判断是否到达出口
+		{
+			for (int i = 1; i < curr_step; i++)
+			{
+				x = RecordX[i];
+				y = RecordY[i];
+				gotoxy(2 * y - 2, x - 1);
+				printf("* ");
+			}
+			gotoxy(30, 24);
+			printf("到达终点，按任意键结束");
+			_getch();
+			break;
+		}
+		if (c != Auto)
+			c = get_key();
+		else Sleep(100);
+
+		if (c == Esc)
+		{
+			gotoxy(0, 24);
+			break;
+		}
+		switch (c)
+		{
+		case Up: //向上走
+			if (map[x - 1][y] != Wall)
+			{
+				paint(x, y);
+				x--;
+				curr_step++;
+				RecordX[curr_step] = x;
+				RecordY[curr_step] = y;
+				RecordFX[curr_step] = 0;
+			}
+			break;
+		case Down: //向下走
+			if (map[x + 1][y] != Wall)
+			{
+				paint(x, y);
+				x++;
+				curr_step++;
+				RecordX[curr_step] = x;
+				RecordY[curr_step] = y;
+				RecordFX[curr_step] = 0;
+			}
+			break;
+		case Left: //向左走
+			if (map[x][y - 1] != Wall)
+			{
+				paint(x, y);
+				y--;
+				curr_step++;
+				RecordX[curr_step] = x;
+				RecordY[curr_step] = y;
+				RecordFX[curr_step] = 0;
+			}
+			break;
+		case Right: //向右走
+			if (map[x][y + 1] != Wall)
+			{
+				paint(x, y);
+				y++;
+				curr_step++;
+				RecordX[curr_step] = x;
+				RecordY[curr_step] = y;
+				RecordFX[curr_step] = 0;
+			}
+			break;
+		case Auto:
+			//自动走
+			if (1)
+			{
+				int mflag = 0;
+				for (int m = RecordFX[curr_step]; m < 4; m++)
+				{
+					int x1, y1;
+					x1 = x + StepX[m];
+					y1 = y + StepY[m];
+					if (map[x1][y1] != Wall && mask[x1][y1] == 0)
+					{
+						paint(x, y);
+
+						x = x1;
+						y = y1;
+						RecordFX[curr_step] = m;
+						curr_step++;
+						RecordX[curr_step] = x;
+						RecordY[curr_step] = y;
+						mask[x][y] = 1;
+						RecordFX[curr_step] = 0;
+						mflag = 1;
+						break;
+					}
+					else RecordFX[curr_step] = m;
+				}
+				if (mflag == 0)
+				{
+
+					while (curr_step >= 0 && RecordFX[curr_step] == 3)
+					{
+						paint(x, y);
+						mask[x][y] = 0;
+						curr_step = curr_step - 1;
+						x = RecordX[curr_step];
+						y = RecordY[curr_step];
+					}
+					if (curr_step >= 0)
+					{
+						paint(x, y);
+						mask[x][y] = 0;
+						curr_step = curr_step - 1;
+						x = RecordX[curr_step];
+						y = RecordY[curr_step];
+
+						RecordFX[curr_step] = RecordFX[curr_step] + 1;
+					}
+
+
+				}
+			}
+			break;
+		}
+		if (curr_step == 0 && RecordFX[curr_step] == 4)
+		{
+			gotoxy(30, 24);
+			printf("无法到达终点，按任意键结束");
+			_getch();
+			break;
+		}
+
+	}
+}
+int main()
+{
+	system("maze demo ");
+	int i, j;
+	srand((unsigned)time(NULL)); //初始化随即种子
+	hidden(); //隐藏光标
+	for (i = 0; i <= Height + 1; i++)
+		for (j = 0; j <= Width + 1; j++)
+			if (i == 0 || i == Height + 1 || j == 0 || j == Width + 1) //初始化迷宫
+				map[i][j] = Road;
+			else map[i][j] = Wall;
+
+	create(2 * (rand() % (Height / 2) + 1), 2 * (rand() % (Width / 2) + 1)); //从随机一个点开始生成迷宫，该点行列都为偶数
+	for (i = 0; i <= Height + 1; i++) //边界处理 
+	{
+		map[i][0] = Wall;
+		map[i][Width + 1] = Wall;
+	}
+
+	for (j = 0; j <= Width + 1; j++) //边界处理
+	{
+		map[0][j] = Wall;
+		map[Height + 1][j] = Wall;
+	}
+	map[2][1] = Start; //给定入口
+	map[Height - 1][Width] = End; //给定出口
+	for (i = 1; i <= Height; i++)
+		for (j = 1; j <= Width; j++) //画出迷宫
+			paint(i, j);
+	game(); //开始游戏
+	_getch();
+	return 0;
+}
